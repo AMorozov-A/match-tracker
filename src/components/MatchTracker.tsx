@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import styled from 'styled-components';
-import type { Match, MatchStatus } from '../services/matchService';
+import type { MatchStatus } from '../services/matchService';
+import type { WebSocketMessage } from '../services/websocketService';
 import { websocketService } from '../services/websocketService';
 import type { AppDispatch, RootState } from '../store';
 import { fetchMatchesThunk, updateMatches } from '../store/matchesSlice';
@@ -81,7 +82,7 @@ const ErrorMessage = styled.div`
   background: rgba(15, 19, 24, 1);
   border-radius: 4px;
   padding: 8px 12px;
-  color: rgba(255, 255, 255, 1);
+  color: white;
   font-size: 14px;
 
   @media (max-width: 1100px) {
@@ -95,7 +96,7 @@ const ErrorIcon = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(235, 2, 55, 1);
+  color: #eb0237;
 
   img {
     width: 16px;
@@ -106,10 +107,8 @@ const ErrorIcon = styled.div`
 const RefreshButton = styled.button`
   background-color: #e41e3f;
   color: white;
-  border: none;
   padding: 10px 20px;
   border-radius: 4px;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -149,10 +148,7 @@ const RefreshButton = styled.button`
 
 const LoadingOverlay = styled.div`
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: rgba(11, 14, 18, 0.7);
   display: flex;
   align-items: center;
@@ -176,18 +172,17 @@ const MatchTracker = () => {
   const { items: matches } = useSelector((state: RootState) => state.matches);
   const [selectedStatus, setSelectedStatus] = useState<MatchStatus | 'all'>('all');
   const [isLoading, setIsLoading] = useState(false);
-  const [showError, setShowError] = useState(true);
+  const [showError, setShowError] = useState(false);
 
-  const handleMatchesUpdate = (updatedMatches: Match[]) => {
-    if (!isLoading) {
-      dispatch(updateMatches(updatedMatches));
+  const handleMatchesUpdate = (message: WebSocketMessage) => {
+    if (!isLoading && message.type === 'update_matches' && message.data) {
+      dispatch(updateMatches(message.data));
     }
   };
 
   const loadMatches = async () => {
     setIsLoading(true);
     setShowError(false);
-    websocketService.setLoading(true);
 
     try {
       await dispatch(fetchMatchesThunk());
@@ -196,23 +191,15 @@ const MatchTracker = () => {
     }
 
     setIsLoading(false);
-    websocketService.setLoading(false);
   };
 
   useEffect(() => {
     loadMatches();
-
     const unsubscribe = websocketService.subscribe(handleMatchesUpdate);
-
-    return () => {
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [dispatch]);
 
-  const filteredMatches = matches.filter((match) => {
-    if (selectedStatus === 'all') return true;
-    return match.status === selectedStatus;
-  });
+  const filteredMatches = matches.filter((match) => selectedStatus === 'all' || match.status === selectedStatus);
 
   return (
     <Container>

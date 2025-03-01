@@ -1,7 +1,7 @@
 import { debounce } from 'lodash';
 import { Match } from './matchService';
 
-interface WebSocketMessage {
+export interface WebSocketMessage {
   type: string;
   data?: Match[];
 }

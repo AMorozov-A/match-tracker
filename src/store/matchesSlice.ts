@@ -19,8 +19,7 @@ const initialState: MatchesState = {
 
 export const fetchMatchesThunk = createAsyncThunk('matches/fetch', async (_, { rejectWithValue }) => {
   try {
-    const matches = await fetchMatches();
-    return matches;
+    return await fetchMatches();
   } catch {
     return rejectWithValue('Ошибка при загрузке матчей');
   }
