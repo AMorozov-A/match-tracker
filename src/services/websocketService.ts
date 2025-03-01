@@ -1,84 +1,89 @@
-import type { Match } from './matchService';
+import { debounce } from 'lodash';
+import { Match } from './matchService';
 
-interface WebSocketResponse {
-  type: 'update_matches';
-  data: Match[];
+interface WebSocketMessage {
+  type: string;
+  data?: Match[];
 }
 
 const WS_URL = 'wss://app.ftoyd.com/fronttemp-service/ws';
-const RECONNECT_DELAY = 3000;
 
-class WebSocketService {
+export class WebSocketService {
   private ws: WebSocket | null = null;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-  private onUpdateCallback: ((matches: Match[]) => void) | null = null;
-  private isLoading = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 1000;
+  private subscribers = new Set<(data: WebSocketMessage) => void>();
+  private debouncedCallbacks = new Map<(data: WebSocketMessage) => void, (data: WebSocketMessage) => void>();
 
   connect() {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      return;
-    }
+    if (this.ws?.readyState === WebSocket.OPEN) return;
 
     this.ws = new WebSocket(WS_URL);
-
-    this.ws.onopen = () => {
-      console.log('WebSocket соединение установлено');
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const response: WebSocketResponse = JSON.parse(event.data);
-
-        if (response.type === 'update_matches' && response.data && this.onUpdateCallback && !this.isLoading) {
-          this.onUpdateCallback(response.data);
-        }
-      } catch (error) {
-        console.error('Ошибка при обработке WebSocket сообщения:', error);
-      }
-    };
-
-    this.ws.onclose = () => {
-      console.log('WebSocket соединение закрыто, переподключение...');
-      this.scheduleReconnect();
-    };
-
-    this.ws.onerror = (error) => {
-      console.error('WebSocket ошибка:', error);
-      this.ws?.close();
-    };
+    this.ws.onopen = this.handleOpen.bind(this);
+    this.ws.onclose = this.handleClose.bind(this);
+    this.ws.onerror = this.handleError.bind(this);
+    this.ws.onmessage = this.handleMessage.bind(this);
   }
 
-  private scheduleReconnect() {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
+  subscribe(callback: (data: WebSocketMessage) => void) {
+    if (!this.subscribers.has(callback)) {
+      const debouncedCallback = debounce(callback, 1000);
+      this.debouncedCallbacks.set(callback, debouncedCallback);
+      this.subscribers.add(callback);
     }
 
-    this.reconnectTimeout = setTimeout(() => {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.connect();
-    }, RECONNECT_DELAY);
+    }
+
+    return () => this.unsubscribe(callback);
   }
 
-  setLoading(loading: boolean) {
-    this.isLoading = loading;
+  private unsubscribe(callback: (data: WebSocketMessage) => void) {
+    this.subscribers.delete(callback);
+    const debouncedCallback = this.debouncedCallbacks.get(callback);
+    if (debouncedCallback) {
+      this.debouncedCallbacks.delete(callback);
+    }
+
+    if (this.subscribers.size === 0 && this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
   }
 
-  subscribe(callback: (matches: Match[]) => void) {
-    console.log('WebSocket: Подписка на обновления');
-    this.onUpdateCallback = callback;
-    console.log('WebSocket: Callback установлен', Boolean(this.onUpdateCallback));
-    this.connect();
+  private handleOpen() {
+    this.reconnectAttempts = 0;
+    this.reconnectDelay = 1000;
+  }
 
-    return () => {
-      console.log('WebSocket: Отписка от обновлений');
-      this.onUpdateCallback = null;
-      if (this.reconnectTimeout) {
-        clearTimeout(this.reconnectTimeout);
-      }
-      if (this.ws) {
-        this.ws.close();
-        this.ws = null;
-      }
-    };
+  private handleClose() {
+    if (this.subscribers.size > 0 && this.reconnectAttempts < this.maxReconnectAttempts) {
+      setTimeout(() => {
+        this.reconnectAttempts++;
+        this.reconnectDelay *= 2;
+        this.connect();
+      }, this.reconnectDelay);
+    }
+  }
+
+  private handleError(error: Event) {
+    console.error('WebSocket error:', error);
+  }
+
+  private handleMessage(event: MessageEvent) {
+    try {
+      const data = JSON.parse(event.data) as WebSocketMessage;
+      this.subscribers.forEach((callback) => {
+        const debouncedCallback = this.debouncedCallbacks.get(callback);
+        if (debouncedCallback) {
+          debouncedCallback(data);
+        }
+      });
+    } catch (error) {
+      console.error('Error parsing WebSocket message:', error);
+    }
   }
 }
 

@@ -42,7 +42,7 @@ src/
 
 1. Клонируйте репозиторий:
    \`\`\`bash
-   git clone [URL репозитория]
+   git clone https://github.com/AMorozov-A/match-tracker.git
    \`\`\`
 
 2. Установите зависимости:

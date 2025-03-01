@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
 import type { Match as MatchType } from '../services/matchService';
 import Team from './Team';
@@ -194,6 +194,33 @@ interface MatchRowProps {
 
 const MatchRow = ({ match }: MatchRowProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 1100);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 1100);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleContainerClick = useCallback(() => {
+    if (!isMobile) {
+      setIsOpen(!isOpen);
+    }
+  }, [isMobile, isOpen]);
+
+  const handleExpandIconClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (isMobile) {
+        e.stopPropagation();
+        setIsOpen(!isOpen);
+      }
+    },
+    [isMobile, isOpen]
+  );
+
   const getMatchStatus = () => {
     switch (match.status) {
       case 'Ongoing':
@@ -222,7 +249,7 @@ const MatchRow = ({ match }: MatchRowProps) => {
 
   return (
     <>
-      <Container isOpen={isOpen}>
+      <Container isOpen={isOpen} onClick={handleContainerClick}>
         <MatchRowHeader isOpen={isOpen}>
           <MatchInfo>
             <Command>
@@ -247,7 +274,7 @@ const MatchRow = ({ match }: MatchRowProps) => {
             </Command>
           </MatchInfo>
 
-          <ExpandIcon isOpen={isOpen} onClick={() => setIsOpen(!isOpen)}>
+          <ExpandIcon isOpen={isOpen} onClick={handleExpandIconClick}>
             <img src="/arrow.svg" alt="Expand" />
           </ExpandIcon>
         </MatchRowHeader>
