@@ -21,7 +21,7 @@ export const fetchMatchesThunk = createAsyncThunk('matches/fetch', async (_, { r
   try {
     const matches = await fetchMatches();
     return matches;
-  } catch (error) {
+  } catch {
     return rejectWithValue('Ошибка при загрузке матчей');
   }
 });
@@ -56,13 +56,11 @@ export const matchesSlice = createSlice({
   },
 });
 
-// Селекторы
 export const selectMatches = (state: RootState) => state.matches.items;
 export const selectLoading = (state: RootState) => state.matches.loading;
 export const selectError = (state: RootState) => state.matches.error;
 export const selectSelectedStatus = (state: RootState) => state.matches.selectedStatus;
 
-// Мемоизированный селектор для фильтрации матчей
 export const selectFilteredMatches = createSelector(
   [selectMatches, selectSelectedStatus],
   (matches, selectedStatus) => {
